@@ -5,7 +5,7 @@ Copyright (C) 2026 CyberOps Systems.
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, version 3. It is distributed WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the full text.
 
-Source: https://github.com/iamcyberopssystems/trace-direct-tax-engine-service. A running instance also returns its source location, the engine commit and the engine build fingerprint at `GET /source`.
+Source: https://github.com/AleemHaider/trace-direct-tax-engine-service. A running instance also returns its source location, the engine commit and the engine build fingerprint at `GET /source`.
 
 ## Third-party component: dTax tax engine
 - Package: `@dtax/tax-engine` (with `@dtax/shared-types`)
