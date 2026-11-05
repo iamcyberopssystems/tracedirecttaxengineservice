@@ -31,9 +31,11 @@ jobs:
       - name: Audit shipped engine dependencies (OSV)
         run: |
           cd build/engine
-          COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm --filter @dtax/tax-engine deploy --prod --ignore-scripts "$RUNNER_TEMP/deploy"
+          # Deploy next to the engine (inside the workspace): pnpm 9 computes a
+          # bad relative store path for a target outside it (EACCES /home/_temp).
+          COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm --filter @dtax/tax-engine deploy --prod --ignore-scripts ../engine-deploy
           cd "$GITHUB_WORKSPACE"
-          python scripts/audit_runtime.py "$RUNNER_TEMP/deploy"
+          python scripts/audit_runtime.py build/engine-deploy
       - name: Static analysis (semgrep)
         run: |
           python -m pip install --quiet semgrep==1.183.0
