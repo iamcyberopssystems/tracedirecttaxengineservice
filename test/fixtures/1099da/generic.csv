@@ -1,0 +1,5 @@
+asset,date_sold,date_acquired,gross_proceeds,cost_basis,gain_loss,transaction_id
+ETH,2025-04-01,2025-03-01,3500.00,2900.00,600.00,g-1
+BTC,2025-06-02,,49000.00,,,g-2
+Dogecoin,2025-09-01,,100.00,,,g-3
+BTC,not-a-date,,10.00,,,g-4

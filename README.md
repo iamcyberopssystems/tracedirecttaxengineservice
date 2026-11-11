@@ -17,6 +17,7 @@ This repository is public because the service is licensed under the AGPL-3.0 (se
 | `GET /source` | none | Source locations, licences, engine commit and build fingerprint (AGPL section 13) |
 | `POST /v1/calculate` | `Authorization: Bearer <ENGINE_SERVICE_TOKEN>` | Cost basis and gains, with optional Form 8949 data |
 | `POST /v1/parse` | `Authorization: Bearer <ENGINE_SERVICE_TOKEN>` | Detect and parse an exchange CSV with the engine's own parsers |
+| `POST /v1/reconcile` | `Authorization: Bearer <ENGINE_SERVICE_TOKEN>` | Parse a Form 1099-DA CSV and reconcile it with our sales (engine's `parse1099DA` and `reconcile`) |
 
 `POST /v1/calculate` body:
 
@@ -44,6 +45,13 @@ Each result is the engine's own `CalculationResult`, plus `baseLotId` for lots t
 The answer has `detectedFormat`, `format`, `summary` (`totalRows`, `parsed`, `failed`), `transactions` (the engine's parsed rows
 without the free-text `notes`) and `errors` (`row` and `message` only; the raw row is never returned, as it can hold
 addresses or names). Verified for Trace.Direct: generic, Coinbase, Binance, Kraken and Gemini (`test/fixtures/csv`).
+
+`POST /v1/reconcile` body: `{"csv": "<1099-DA file text>", "taxYear": 2025, "dispositions": [{"eventId", "asset",
+"dateSold", "proceeds", "costBasis", "gainLoss"}]}`: one disposition per sale of the same broker account. The answer has
+`parse` (`entries`, `errors`), `summary` (the engine's counts and net differences) and `items` (`status`, `riskLevel`,
+`coverageStatus`, `broker` row, `eventId`, differences). Not passed back: broker transaction ids, the broker name, the
+engine's suggestion texts and its `estimatedTaxOverpayment` guess. Layouts the engine reads: Coinbase and generic
+(`test/fixtures/1099da`). The CSV is limited to 2 MB.
 
 **UTC only.** The engine reads Binance, Kraken and Gemini times in the process's local time zone. The service refuses to
 start unless its zone is UTC; the Docker image and `npm start` set `TZ=UTC`.

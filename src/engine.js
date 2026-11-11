@@ -3,7 +3,8 @@
  * Thin adapter over the unmodified dTax tax engine.
  *
  * Uses only the engine's public exports (CostBasisCalculator, baseLotId,
- * generateForm8949, form8949ToCsv, detectCsvFormat, parseCsv). It converts JSON to the engine's input
+ * generateForm8949, form8949ToCsv, detectCsvFormat, parseCsv, parse1099DA,
+ * reconcile). It converts JSON to the engine's input
  * types and the engine's results back to JSON. It never registers custom
  * strategies, never changes engine objects, and adds no tax logic.
  */
@@ -141,4 +142,47 @@ function parse(req) {
   };
 }
 
-module.exports = { calculate, parse, load, ENGINE_DIR };
+// Summary fields passed back. Left out: estimatedTaxOverpayment (a guess at
+// the top tax rate, not a figure for a client document).
+const RECON_SUMMARY = ["totalBrokerEntries", "totalDtaxDispositions", "matched", "proceedsMismatch", "basisMismatch",
+  "bothMismatch", "missingInDtax", "missingIn1099da", "netProceedsDiff", "netGainLossDiff", "coveredCount",
+  "noncoveredCount", "basisMissingCount"];
+
+const iso = (d) => (d instanceof Date ? d.toISOString() : null);
+
+function brokerOut(b) {
+  if (!b) return null;
+  const out = { row: b.rowIndex, asset: b.asset, dateSold: iso(b.dateSold), grossProceeds: b.grossProceeds };
+  if (b.dateAcquired) out.dateAcquired = iso(b.dateAcquired);
+  if (b.costBasis !== undefined) out.costBasis = b.costBasis;
+  if (b.gainLoss !== undefined) out.gainLoss = b.gainLoss;
+  return out;
+}
+
+/**
+ * Parse a 1099-DA CSV and reconcile it with our sales, both with the engine's
+ * own functions. Not passed back: broker transaction ids, the broker name and
+ * the engine's suggestion texts (the backend words its own).
+ */
+function reconcile(req) {
+  const e = load();
+  const parsed = e.parse1099DA(req.csv, "broker", req.taxYear);
+  const dispositions = req.dispositions.map((d) => ({ eventId: d.eventId, asset: d.asset,
+    dateSold: toDate(d.dateSold), proceeds: d.proceeds, costBasis: d.costBasis, gainLoss: d.gainLoss }));
+  const report = e.reconcile(parsed.entries, dispositions, { taxYear: req.taxYear, brokerName: "broker" });
+  const summary = {};
+  for (const k of RECON_SUMMARY) summary[k] = report.summary[k];
+  return {
+    taxYear: report.taxYear,
+    parse: { entries: parsed.entries.length,
+      errors: parsed.errors.map((err) => ({ row: err.row, message: String(err.message).slice(0, 200) })) },
+    summary,
+    items: report.items.map((it) => ({
+      status: it.status, riskLevel: it.riskLevel, coverageStatus: it.coverageStatus,
+      broker: brokerOut(it.brokerEntry), eventId: it.dtaxEntry ? it.dtaxEntry.eventId : null,
+      proceedsDiff: it.proceedsDiff, costBasisDiff: it.costBasisDiff, gainLossDiff: it.gainLossDiff,
+    })),
+  };
+}
+
+module.exports = { calculate, parse, reconcile, load, ENGINE_DIR };

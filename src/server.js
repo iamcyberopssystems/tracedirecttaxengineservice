@@ -10,6 +10,7 @@
  *   GET  /source          where to get the source of this service and the engine (AGPL s.13; no auth)
  *   POST /v1/calculate    cost basis, gains, optional Form 8949 data (bearer token)
  *   POST /v1/parse        detect and parse an exchange CSV with the engine's parsers (bearer token)
+ *   POST /v1/reconcile    parse a Form 1099-DA CSV and reconcile it with our sales (bearer token)
  *
  * Runs in UTC only: the engine reads Binance, Kraken and Gemini times in the
  * process's local zone, so any other zone would shift every trade.
@@ -19,7 +20,7 @@ const http = require("node:http");
 const path = require("node:path");
 const fs = require("node:fs");
 
-const { validateCalculate, validateParse, ValidationError } = require("./validate");
+const { validateCalculate, validateParse, validateReconcile, ValidationError } = require("./validate");
 const engine = require("./engine");
 
 const MAX_BODY = 10 * 1024 * 1024;
@@ -94,7 +95,9 @@ function createServer({ token, log = (line) => process.stdout.write(`${line}\n`)
     try {
       if (route === "GET /healthz") return send(res, 200, { status: "ok", engineCommit: LOCK.commit });
       if (route === "GET /source") return send(res, 200, SOURCE);
-      if (route !== "POST /v1/calculate" && route !== "POST /v1/parse") return send(res, 404, { error: "not found" });
+      if (!["POST /v1/calculate", "POST /v1/parse", "POST /v1/reconcile"].includes(route)) {
+        return send(res, 404, { error: "not found" });
+      }
       if (!tokenMatches(req.headers.authorization, expected)) return send(res, 401, { error: "unauthorized" });
       if (!String(req.headers["content-type"] || "").startsWith("application/json")) {
         return send(res, 415, { error: "content-type must be application/json" });
@@ -112,6 +115,14 @@ function createServer({ token, log = (line) => process.stdout.write(`${line}\n`)
           return send(res, 200, engine.parse(parseInput));
         } catch (err) {
           return send(res, 422, { error: "the file could not be parsed" });
+        }
+      }
+      if (route === "POST /v1/reconcile") {
+        const reconInput = validateReconcile(body);
+        try {
+          return send(res, 200, engine.reconcile(reconInput));
+        } catch (err) {
+          return send(res, 422, { error: "the 1099-DA file could not be reconciled" });
         }
       }
       const input = validateCalculate(body);

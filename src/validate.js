@@ -149,4 +149,34 @@ function validateParse(body) {
   return { csv: body.csv, format: body.format };
 }
 
-module.exports = { validateCalculate, validateParse, ValidationError, METHODS, MAX_ITEMS, CSV_FORMATS };
+const MAX_1099DA_CHARS = 2 * 1024 * 1024;
+
+function disposition(d, w) {
+  onlyKeys(d, w, ["eventId", "asset", "dateSold", "proceeds", "costBasis", "gainLoss"]);
+  id(d.eventId, `${w}.eventId`);
+  asset(d.asset, `${w}.asset`);
+  date(d.dateSold, `${w}.dateSold`);
+  num(d.proceeds, `${w}.proceeds`, { min: 0 });
+  num(d.costBasis, `${w}.costBasis`, { min: 0 });
+  num(d.gainLoss, `${w}.gainLoss`);
+}
+
+/** POST /v1/reconcile: a 1099-DA CSV and our own sales for the same account and year. */
+function validateReconcile(body) {
+  onlyKeys(body, "request", ["csv", "taxYear", "dispositions"]);
+  if (typeof body.csv !== "string" || !body.csv.trim()) fail("csv", "must be non-empty text");
+  if (body.csv.length > MAX_1099DA_CHARS) fail("csv", "is too large");
+  if (!Number.isInteger(body.taxYear) || body.taxYear < 2009 || body.taxYear > 2100) fail("taxYear", "must be a year");
+  if (!Array.isArray(body.dispositions)) fail("dispositions", "must be an array");
+  if (body.dispositions.length > MAX_ITEMS) fail("dispositions", `has more than ${MAX_ITEMS} items`);
+  const seen = new Set();
+  body.dispositions.forEach((d, i) => {
+    disposition(d, `dispositions[${i}]`);
+    if (seen.has(d.eventId)) fail(`dispositions[${i}].eventId`, `duplicate id "${d.eventId}"`);
+    seen.add(d.eventId);
+  });
+  return { csv: body.csv, taxYear: body.taxYear, dispositions: body.dispositions };
+}
+
+module.exports = { validateCalculate, validateParse, validateReconcile, ValidationError, METHODS, MAX_ITEMS,
+  CSV_FORMATS };
