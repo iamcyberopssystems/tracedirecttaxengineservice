@@ -134,4 +134,19 @@ function validateCalculate(body) {
   };
 }
 
-module.exports = { validateCalculate, ValidationError, METHODS, MAX_ITEMS };
+// The engine's CsvFormat values (pinned engine). A caller may name one to skip detection.
+const CSV_FORMATS = new Set(["generic", "coinbase", "binance", "binance_us", "kraken", "kraken_trades", "etherscan",
+  "etherscan_erc20", "gemini", "crypto_com", "kucoin", "okx", "bybit", "gate", "bitget", "mexc", "htx", "solscan",
+  "solscan_defi", "bitfinex", "poloniex", "koinly", "cointracker", "cryptact", "bitstamp", "upbit", "robinhood",
+  "wazirx", "coindcx", "zebpay"]);
+const MAX_CSV_CHARS = 8 * 1024 * 1024;
+
+function validateParse(body) {
+  onlyKeys(body, "request", ["csv"], ["format"]);
+  if (typeof body.csv !== "string" || !body.csv.trim()) fail("csv", "must be non-empty text");
+  if (body.csv.length > MAX_CSV_CHARS) fail("csv", "is too large");
+  if (body.format !== undefined && !CSV_FORMATS.has(body.format)) fail("format", "is not a supported format");
+  return { csv: body.csv, format: body.format };
+}
+
+module.exports = { validateCalculate, validateParse, ValidationError, METHODS, MAX_ITEMS, CSV_FORMATS };

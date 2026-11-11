@@ -17,6 +17,7 @@ RUN cd /src/build/engine \
 
 FROM ${NODE_IMAGE}
 ENV NODE_ENV=production \
+    TZ=UTC \
     DTAX_ENGINE_DIR=/app/build/engine
 WORKDIR /app
 COPY --from=build /out/tax-engine /app/build/engine/packages/tax-engine

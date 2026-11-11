@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build:engine": "bash scripts/build-engine.sh",
-    "start": "node src/server.js",
-    "test": "node --test test/*.test.js"
+    "start": "TZ=UTC node src/server.js",
+    "test": "TZ=UTC node --test test/*.test.js"
   }
 }

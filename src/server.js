@@ -9,13 +9,17 @@
  *   GET  /healthz         liveness, engine pin (no auth)
  *   GET  /source          where to get the source of this service and the engine (AGPL s.13; no auth)
  *   POST /v1/calculate    cost basis, gains, optional Form 8949 data (bearer token)
+ *   POST /v1/parse        detect and parse an exchange CSV with the engine's parsers (bearer token)
+ *
+ * Runs in UTC only: the engine reads Binance, Kraken and Gemini times in the
+ * process's local zone, so any other zone would shift every trade.
  */
 const crypto = require("node:crypto");
 const http = require("node:http");
 const path = require("node:path");
 const fs = require("node:fs");
 
-const { validateCalculate, ValidationError } = require("./validate");
+const { validateCalculate, validateParse, ValidationError } = require("./validate");
 const engine = require("./engine");
 
 const MAX_BODY = 10 * 1024 * 1024;
@@ -67,7 +71,16 @@ function readBody(req) {
   });
 }
 
+function assertUtc() {
+  // Both a January and a July date, so a zone with summer time can't pass.
+  const offsets = [new Date(2025, 0, 15).getTimezoneOffset(), new Date(2025, 6, 15).getTimezoneOffset()];
+  if (offsets.some((o) => o !== 0)) {
+    throw new Error("the service must run with TZ=UTC: exchange times would be shifted otherwise");
+  }
+}
+
 function createServer({ token, log = (line) => process.stdout.write(`${line}\n`) }) {
+  assertUtc();
   if (typeof token !== "string" || token.length < 32) {
     throw new Error("ENGINE_SERVICE_TOKEN must be set to at least 32 characters");
   }
@@ -81,7 +94,7 @@ function createServer({ token, log = (line) => process.stdout.write(`${line}\n`)
     try {
       if (route === "GET /healthz") return send(res, 200, { status: "ok", engineCommit: LOCK.commit });
       if (route === "GET /source") return send(res, 200, SOURCE);
-      if (route !== "POST /v1/calculate") return send(res, 404, { error: "not found" });
+      if (route !== "POST /v1/calculate" && route !== "POST /v1/parse") return send(res, 404, { error: "not found" });
       if (!tokenMatches(req.headers.authorization, expected)) return send(res, 401, { error: "unauthorized" });
       if (!String(req.headers["content-type"] || "").startsWith("application/json")) {
         return send(res, 415, { error: "content-type must be application/json" });
@@ -92,6 +105,14 @@ function createServer({ token, log = (line) => process.stdout.write(`${line}\n`)
       } catch (err) {
         if (err.status === 413) return send(res, 413, { error: "request body too large" });
         return send(res, 400, { error: "body is not valid JSON" });
+      }
+      if (route === "POST /v1/parse") {
+        const parseInput = validateParse(body);
+        try {
+          return send(res, 200, engine.parse(parseInput));
+        } catch (err) {
+          return send(res, 422, { error: "the file could not be parsed" });
+        }
       }
       const input = validateCalculate(body);
       let out;
@@ -119,4 +140,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createServer, SOURCE };
+module.exports = { assertUtc, createServer, SOURCE };

@@ -3,7 +3,7 @@
  * Thin adapter over the unmodified dTax tax engine.
  *
  * Uses only the engine's public exports (CostBasisCalculator, baseLotId,
- * generateForm8949, form8949ToCsv). It converts JSON to the engine's input
+ * generateForm8949, form8949ToCsv, detectCsvFormat, parseCsv). It converts JSON to the engine's input
  * types and the engine's results back to JSON. It never registers custom
  * strategies, never changes engine objects, and adds no tax logic.
  */
@@ -113,4 +113,32 @@ function calculate(req) {
   return out;
 }
 
-module.exports = { calculate, load, ENGINE_DIR };
+// Fields of a parsed row passed back. `notes` (free text) is dropped: it can
+// hold names or addresses, and nothing downstream needs it.
+const TX_FIELDS = ["type", "timestamp", "receivedAsset", "receivedAmount", "receivedValueUsd", "sentAsset",
+  "sentAmount", "sentValueUsd", "feeAsset", "feeAmount", "feeValueUsd", "source", "chain"];
+
+/**
+ * Detect the format and parse an exchange CSV with the engine's own parsers.
+ * Row errors carry the row number and the engine's message only, never the
+ * raw row (it can hold wallet addresses or names).
+ */
+function parse(req) {
+  const e = load();
+  const detected = e.detectCsvFormat(req.csv);
+  const result = e.parseCsv(req.csv, req.format ? { format: req.format } : undefined);
+  const transactions = result.transactions.map((tx) => {
+    const out = {};
+    for (const k of TX_FIELDS) if (tx[k] !== undefined && tx[k] !== null && tx[k] !== "") out[k] = tx[k];
+    return out;
+  });
+  return {
+    detectedFormat: detected,
+    format: result.summary.format,
+    summary: { totalRows: result.summary.totalRows, parsed: result.summary.parsed, failed: result.summary.failed },
+    transactions,
+    errors: result.errors.map((err) => ({ row: err.row, message: String(err.message).slice(0, 200) })),
+  };
+}
+
+module.exports = { calculate, parse, load, ENGINE_DIR };
